@@ -1,0 +1,4 @@
+/target
+**/*.rs.bk
+some_store*
+test_files/*
