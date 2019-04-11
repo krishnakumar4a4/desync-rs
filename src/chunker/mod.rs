@@ -11,7 +11,10 @@ use crate::io;
 pub struct ChunkerConfig {
     pub index: Box<index::Index>,
     pub store: Box<store::Store>,
-    pub source: Box<io::LocalSourceFile>
+    pub source: Box<io::LocalSourceFile>,
+    pub min_size: u64,
+    pub max_size: u64,
+    pub avg_size: u64
 }
 
 static HASH_TABLE: [u32; 256] = [
@@ -88,19 +91,30 @@ pub const CHUNK_SIZE_MAX_DEFAULT: u64 = CHUNK_SIZE_AVG_DEFAULT * 4;
 
 impl ChunkerConfig {
     pub fn chunk(&mut self) {
+        // TODO: move idx init inside loop
         let mut idx: usize = 0;
+        let mut total_byte_count: u64 = 0;
         let mut file = Rc::get_mut(&mut self.source.file).unwrap();
         let discriminator = discriminator_from_avg(CHUNK_SIZE_AVG_DEFAULT);
         self.store.create("");
 
+        // Write index header
+        self.index.write_header(self.min_size, self.max_size, self.avg_size);
+
         loop {
             let mut chunk_buf: VecDeque<u8> = VecDeque::new();
             let mut window_rev:Vec<u8> = Vec::new();
-            read_min(file, &mut chunk_buf, &mut window_rev);
-            if window_rev.len() != CHUNKER_WINDOW_SIZE as usize {
+            read_min(file, &mut chunk_buf, &mut window_rev, self.min_size);
+            let win_size = window_rev.len();
+            if win_size != CHUNKER_WINDOW_SIZE as usize {
                 //Write to file and return
+                total_byte_count += win_size as u64;
+                let start_pos = total_byte_count - win_size as u64;
                 println!("read min ended");
-                println!("Chunk found with len {:?}", chunk_buf.len());
+                let hash_bytes = self.store.write_item(Vec::from(chunk_buf));
+                self.index.add_entry(start_pos, hash_bytes);
+                self.index.write_tail();
+                println!("Chunk found start_pos with {:?}", start_pos);
                 break;
             }
             // Reversing window to get it in actual order
@@ -108,9 +122,11 @@ impl ChunkerConfig {
             for v in window_rev.iter() {
                 window.push(*v);
             }
-            // let mut window = chunk_buf.rchunks(CHUNKER_WINDOW_SIZE as usize).next().unwrap().to_vec();
             let mut hash = hash(&window);
-            let mut buf_size = CHUNK_SIZE_MIN_DEFAULT;
+
+            //TODO: buf_size can be removed in favor of chunk_buf.len()?
+            let mut buf_size = self.min_size;
+            total_byte_count += buf_size as u64;
             for (_i, v) in file.try_clone().unwrap().bytes().enumerate() {
                 // Remove first element
                 let in_byte = v.unwrap();
@@ -120,21 +136,27 @@ impl ChunkerConfig {
                 hash = hash.rotate_left(1) ^ HASH_TABLE[out_byte as usize].rotate_left(CHUNKER_WINDOW_SIZE as u32) ^ HASH_TABLE[in_byte as usize];
                 chunk_buf.push_back(in_byte);
                 buf_size = buf_size + 1;
+                total_byte_count += 1;
 
-                if buf_size >= CHUNK_SIZE_MAX_DEFAULT {
-                    println!("Chunk found with max size");
+                if buf_size >= self.max_size {
                     idx = 0;
-                    self.store.write_item(Vec::from(chunk_buf));
+                    let hash_bytes = self.store.write_item(Vec::from(chunk_buf));
+                    let start_pos = total_byte_count - buf_size;
+                    self.index.add_entry(start_pos, hash_bytes);
+                    println!("Chunk found with max size, start_pos: {:?}",start_pos);
                     break;
                 }
 
                 if (hash % discriminator) == (discriminator-1) {
-                    println!("Chunk found with len {:?}, idx {:?}, hash {:?}", chunk_buf.len(), idx,hash);
                     idx = 0;
-                    self.store.write_item(Vec::from(chunk_buf));
+                    let hash_bytes = self.store.write_item(Vec::from(chunk_buf));
+                    let start_pos = total_byte_count - buf_size;
+                    self.index.add_entry(start_pos, hash_bytes);
+                    println!("Chunk found with start_pos {:?}", start_pos);
                     break;
                 }
             }
+            //TODO: Handle EOF when buf_size > min but less than max or discriminator val cannot found?
         }
     }
 }
@@ -153,11 +175,11 @@ fn discriminator_from_avg(avg: u64) -> u32 {
 }
 
 
-pub fn read_min(f: &mut File, buf: &mut VecDeque<u8>, window: &mut Vec<u8>) {
+pub fn read_min(f: &mut File, buf: &mut VecDeque<u8>, window: &mut Vec<u8>, min_size: u64) {
     for (i, v) in f.bytes().enumerate() {
         match v {
             Ok(val) => {
-                let rem = CHUNK_SIZE_MIN_DEFAULT-(i as u64)-1;
+                let rem = min_size-(i as u64)-1;
                 if rem < CHUNKER_WINDOW_SIZE as u64 {
                     // Fill window
                     window.push(val);

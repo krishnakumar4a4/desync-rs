@@ -46,7 +46,7 @@ pub struct LocalStore {
 
 pub trait Store {
     fn create(&self, path: &str) -> PathBuf;
-    fn write_item(&mut self, bytes: Vec<u8>);
+    fn write_item(&mut self, bytes: Vec<u8>) -> [u8;32];
 }
 
 impl Store for LocalStore {
@@ -64,7 +64,7 @@ impl Store for LocalStore {
         }
     }
 
-    fn write_item(&mut self, bytes: Vec<u8>) {
+    fn write_item(&mut self, bytes: Vec<u8>) -> [u8;32] {
         // Write to file 
         let mut hasher = Sha512Trunc256::new();
         hasher.input(&bytes);
@@ -90,6 +90,10 @@ impl Store for LocalStore {
             }
             self.stats.add_new_item(bytes.len() as u64);
         };
+
+        let mut hash_bytes: [u8;32] = [0;32];
+        hasher.result(&mut hash_bytes);
+        hash_bytes
     }
 }
 

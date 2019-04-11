@@ -19,20 +19,22 @@ mod index;
 mod store;
 mod io;
 mod chunker;
+mod utils;
 
 fn main() {
     let filename = String::from("test_files/temp/input");
     let mut chunkerConfig = chunker::ChunkerConfig {
-        index: Box::new(index::LocalIndexFile {
-            path: String::from("some_file")
-        }),
+        index: Box::new(index::LocalIndexFile::new("some_index.caibx")),
         store: Box::new(store::LocalStore {
             path: String::from("some_store"),
             stats: store::StoreStats::new(chunker::CHUNK_SIZE_MIN_DEFAULT, 
                     chunker::CHUNK_SIZE_MAX_DEFAULT, 
                     chunker::CHUNK_SIZE_AVG_DEFAULT)
         }),
-        source: Box::new(io::LocalSourceFile::new(filename))
+        source: Box::new(io::LocalSourceFile::new(filename)),
+        min_size: chunker::CHUNK_SIZE_MIN_DEFAULT,
+        max_size: chunker::CHUNK_SIZE_MAX_DEFAULT,
+        avg_size: chunker::CHUNK_SIZE_AVG_DEFAULT
     };
 
     chunkerConfig.chunk();
