@@ -108,13 +108,12 @@ impl ChunkerConfig {
             let win_size = window_rev.len();
             if win_size != CHUNKER_WINDOW_SIZE as usize {
                 //Write to file and return
-                total_byte_count += win_size as u64;
-                let start_pos = total_byte_count - win_size as u64;
+                total_byte_count += chunk_buf.len() as u64;
                 println!("read min ended");
                 let hash_bytes = self.store.write_item(Vec::from(chunk_buf));
-                self.index.add_entry(start_pos, hash_bytes);
+                self.index.add_entry(total_byte_count, hash_bytes);
                 self.index.write_tail();
-                println!("Chunk found start_pos with {:?}", start_pos);
+                println!("Chunk found offset with {:?}", total_byte_count);
                 break;
             }
             // Reversing window to get it in actual order
@@ -141,18 +140,16 @@ impl ChunkerConfig {
                 if buf_size >= self.max_size {
                     idx = 0;
                     let hash_bytes = self.store.write_item(Vec::from(chunk_buf));
-                    let start_pos = total_byte_count - buf_size;
-                    self.index.add_entry(start_pos, hash_bytes);
-                    println!("Chunk found with max size, start_pos: {:?}",start_pos);
+                    self.index.add_entry(total_byte_count, hash_bytes);
+                    println!("Chunk found with max size, offset: {:?}",total_byte_count);
                     break;
                 }
 
                 if (hash % discriminator) == (discriminator-1) {
                     idx = 0;
                     let hash_bytes = self.store.write_item(Vec::from(chunk_buf));
-                    let start_pos = total_byte_count - buf_size;
-                    self.index.add_entry(start_pos, hash_bytes);
-                    println!("Chunk found with start_pos {:?}", start_pos);
+                    self.index.add_entry(total_byte_count, hash_bytes);
+                    println!("Chunk found with offset {:?}", total_byte_count);
                     break;
                 }
             }

@@ -43,8 +43,8 @@ impl Index for LocalIndexFile {
         utils::write_u64(file, CaFormatIndex).unwrap();
         utils::write_u64(file, FeatureFlags).unwrap();
         utils::write_u64(file, min).unwrap();
-        utils::write_u64(file, max).unwrap();
         utils::write_u64(file, avg).unwrap();
+        utils::write_u64(file, max).unwrap();
         // Header for chunks
         let CaFormatTable = 0xe75b9e112f17417d;
         utils::write_u64(file, std::u64::MAX);
