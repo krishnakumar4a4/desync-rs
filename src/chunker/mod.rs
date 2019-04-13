@@ -7,6 +7,7 @@ use std::collections::VecDeque;
 use crate::index;
 use crate::store;
 use crate::io;
+use log::{info, debug};
 
 pub struct ChunkerConfig {
     pub index: Box<index::Index>,
@@ -109,11 +110,12 @@ impl ChunkerConfig {
             if win_size != CHUNKER_WINDOW_SIZE as usize {
                 //Write to file and return
                 total_byte_count += chunk_buf.len() as u64;
-                println!("read min ended");
+                info!(target:"chunker", "EOF reached, Could not find data to fill min chunk size");
+                debug!("Chunk found with size {:?}, offset {:?}", chunk_buf.len(), total_byte_count);
                 let hash_bytes = self.store.write_item(Vec::from(chunk_buf));
                 self.index.add_entry(total_byte_count, hash_bytes);
                 self.index.write_tail();
-                println!("Chunk found offset with {:?}", total_byte_count);
+                info!(target:"chunker", "Done processing chunks from file size {:?}", total_byte_count);
                 break;
             }
             // Reversing window to get it in actual order
@@ -141,7 +143,7 @@ impl ChunkerConfig {
                     idx = 0;
                     let hash_bytes = self.store.write_item(Vec::from(chunk_buf));
                     self.index.add_entry(total_byte_count, hash_bytes);
-                    println!("Chunk found with max size, offset: {:?}",total_byte_count);
+                    debug!("Chunk found with max size: {:?}, offset: {:?}", buf_size, total_byte_count);
                     break;
                 }
 
@@ -149,7 +151,7 @@ impl ChunkerConfig {
                     idx = 0;
                     let hash_bytes = self.store.write_item(Vec::from(chunk_buf));
                     self.index.add_entry(total_byte_count, hash_bytes);
-                    println!("Chunk found with offset {:?}", total_byte_count);
+                    debug!("Chunk found with size: {:?}, offset {:?}", buf_size, total_byte_count);
                     break;
                 }
             }
@@ -187,7 +189,7 @@ pub fn read_min(f: &mut File, buf: &mut VecDeque<u8>, window: &mut Vec<u8>, min_
                 }
             },
             Err(e) => {
-                println!("Error while reading file {:?}", e);
+                panic!("Error while reading file {:?}", e);
             }
         }
     }

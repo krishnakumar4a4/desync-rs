@@ -21,7 +21,12 @@ mod io;
 mod chunker;
 mod utils;
 
+extern crate log;
+extern crate log4rs;
+
 fn main() {
+    log4rs::init_file("log4rs.yml", Default::default()).unwrap();
+
     let filename = String::from("test_files/temp/input");
     let mut chunkerConfig = chunker::ChunkerConfig {
         index: Box::new(index::LocalIndexFile::new("some_index.caibx")),

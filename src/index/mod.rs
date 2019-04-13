@@ -1,6 +1,7 @@
 use std::fs::File;
 use std::rc::Rc;
 use crate::utils;
+use log::{info, debug};
 
 pub struct LocalIndexFile {
     pub path: String,
@@ -35,6 +36,7 @@ pub trait Index {
 
 impl Index for LocalIndexFile {
     fn write_header(&mut self, min: u64, max: u64, avg: u64) {
+        info!("Started writing to index file");
         let size = 48;
         let CaFormatIndex = 0x96824d9c7b129ff9;
         let FeatureFlags = 11529215046068469760;
@@ -51,7 +53,7 @@ impl Index for LocalIndexFile {
         self.chunk_table_size += 8;
         utils::write_u64(file, CaFormatTable);
         self.chunk_table_size += 8;
-        // println!("header n {:?}",self.chunk_table_size);
+        debug!("Wrote header to index file");
     }
     fn add_entry(&mut self, start: u64, chunk_id: [u8;32]) {
         let mut file = Rc::get_mut(&mut self.file).unwrap();
@@ -59,7 +61,7 @@ impl Index for LocalIndexFile {
         self.chunk_table_size += 8;
         utils::write_32_bytes(file, chunk_id).unwrap();
         self.chunk_table_size += 32;
-        // println!("chunk n {:?}",self.chunk_table_size);
+        debug!("Added chunk entry to index file");
     }
     fn write_tail(&mut self) {
         let mut file = Rc::get_mut(&mut self.file).unwrap();
@@ -70,6 +72,7 @@ impl Index for LocalIndexFile {
         utils::write_u64(file, self.chunk_table_size + 40).unwrap();
         utils::write_u64(file, CaFormatTableTailMarker).unwrap();
         self.chunk_table_size += (5 * 8);
-        // println!("tail n {:?}",self.chunk_table_size);
+        debug!("Wrote tail marker to index file");
+        info!("Finished writing to index file");
     }
 }
