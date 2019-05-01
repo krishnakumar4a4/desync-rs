@@ -10,6 +10,7 @@ use url::{Url, ParseError};
 use crate::utils;
 use std::io::Read;
 use zstd::Decoder;
+use std::sync::{Arc, Mutex};
 
 pub fn get_suitable_store(path: &str, min: u64, max: u64, avg: u64) -> Box<Store> {
     match Url::parse(String::from(path).trim_end_matches("/")) {
@@ -209,7 +210,6 @@ impl Store for RemoteHTTPStore {
     }
 
     fn read_item(&mut self, id: Vec<u8>) -> Vec<u8> {
-        //TODO: Read from http store
         use rustc_serialize::hex::ToHex;
         let chunk_name = id[..].to_hex();
         let (sub_dir_name,_) = chunk_name.split_at(4);
@@ -218,24 +218,26 @@ impl Store for RemoteHTTPStore {
         let mut full_path = format!("{}/{}/{}.cacnk",url_current_path, sub_dir_name, chunk_name);
         url.set_path(&full_path);
         let uri = url.as_str().parse::<Uri>().unwrap();
-        let mut final_bytes: Vec<u8> = Vec::new();
+        
+        // Fixed tokio lifetime problems with below solution reference using Arc
+        // Ref: https://stackoverflow.com/questions/39473282/tokio-curl-capture-output-into-a-local-vec-may-outlive-borrowed-value
+        let final_bytes = Arc::new(Mutex::new(Vec::<u8>::new()));
+        let mut final_bytes_clone = final_bytes.clone();
         let fut = fetch_chunk(uri)
-            // use the parsed vector
-            .map(|data| {
+            .map(move |data| {
                 let mut bufReader = Cursor::new(data).reader();
                 let mut decoder = Decoder::new(bufReader).unwrap();
-                io::copy(&mut decoder, &mut final_bytes).expect("Error: Cannot decompress data");
+                let mut final_bytes_clone = final_bytes_clone.lock().unwrap();
+                io::copy(&mut decoder, &mut *final_bytes_clone).expect("Error: Cannot decompress data");
             })
-            // if there was an error print it
             .map_err(|e| {
                 panic!("Remote Fetch err {:?}",e);
             });
 
-        //TODO: Fix this lifetime issue to return bytes
-        let mut runtime = tokio::runtime::Runtime::new().expect("Unable to create a runtime");
-        let s = runtime.block_on(fut);
-        // fut.wait();
-        final_bytes
+        // TODO: start runtime once in the beginning of program instead of bootstrapping everytime.
+        tokio::run(fut);
+        let final_bytes_value = (*final_bytes.lock().unwrap()).clone();
+        final_bytes_value
     }
 }
 
