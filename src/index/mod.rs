@@ -186,6 +186,49 @@ impl Index for LocalIndexFile {
     }
 }
 
+pub struct InMemoryIndex {
+    pub chunk_table_size: u64,
+    pub chunk_data: Vec<ChunkData>,
+    pub lastOffset: u64
+}
+
+impl InMemoryIndex {
+    pub fn new(_path: &str) -> InMemoryIndex {
+        InMemoryIndex {
+            chunk_table_size: 0,
+            chunk_data: Vec::new(),
+            lastOffset: 0
+        }
+    }
+}
+
+impl Index for InMemoryIndex {
+    fn write_header(&mut self, min: u64, max: u64, avg: u64) {
+    }
+    fn add_entry(&mut self, start: u64, chunk_id: [u8;32]) {
+        let mut chunkItems: Vec<ChunkData> = Vec::new();
+        self.chunk_table_size += 8;
+        self.chunk_table_size += 32;
+        println!("{:70} {:20}", utils::bytes_to_hex(chunk_id.to_vec()), start-self.lastOffset);
+        chunkItems.push(ChunkData{
+                        id: chunk_id,
+                        start: start,
+                        size: start - self.lastOffset
+                    });
+        self.chunk_data = chunkItems;
+    }
+    fn write_tail(&mut self) {
+
+    }
+    //TODO: rename to load
+    fn read(&mut self) {
+
+    }
+    fn getChunkData(&self) -> Vec<ChunkData> {
+        self.chunk_data.clone()
+    }
+}
+
 use std::clone::Clone;
 
 // TableItem ---------------------------------------------------------------

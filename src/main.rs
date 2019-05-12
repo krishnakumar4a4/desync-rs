@@ -32,68 +32,24 @@ extern crate rustc_serialize;
 extern crate bytes;
 extern crate tokio;
 
-use clap::{SubCommand, Arg, App};
 use crate::assembler::AssembleOps;
+use crate::index::Index;
 use log::{info};
+use clap::ArgMatches;
 
 fn main() {
     log4rs::init_file("log4rs.yml", Default::default()).unwrap();
-    let matches = App::new("desync-rs")
-        .version("0.1.0")
-        .author("Krishna Kumar T <krishna.thokala2010@gmail.com>")
-        .subcommand(SubCommand::with_name("make")
-                    .help("Creates chunks for the input file")
-                    .arg(Arg::with_name("index")
-                            .short("i")
-                            .long("index")
-                            .help("Path to index file")
-                            .takes_value(true))
-                    .arg(Arg::with_name("store")
-                            .short("s")
-                            .long("store")
-                            .help("Path to chunk store")
-                            .takes_value(true))
-                    .arg(Arg::with_name("file")
-                            .short("f")
-                            .long("file")
-                            .help("Path to input file to be chunked")
-                            .takes_value(true)
-                            .required(true))
-                        )
-        .subcommand(SubCommand::with_name("extract")
-                    .help("Assembles chunks to form output")
-                    .arg(Arg::with_name("index")
-                            .short("i")
-                            .long("index")
-                            .help("Path to index file")
-                            .takes_value(true)
-                            .required(true))
-                    .arg(Arg::with_name("store")
-                            .short("s")
-                            .long("store")
-                            .help("Path to chunk store")
-                            .takes_value(true))
-                    .arg(Arg::with_name("seed-file")
-                            .long("sf")
-                            .help("Path to seed file")
-                            .takes_value(true))
-                    .arg(Arg::with_name("seed-index")
-                            .long("si")
-                            .help("Path to seed index file")
-                            .takes_value(true))
-                    .arg(Arg::with_name("file")
-                            .short("f")
-                            .long("file")
-                            .help("Path to input file to be chunked")
-                            .takes_value(true)
-                            .required(true))
-                    ).get_matches();
+
+    let mut matches = ArgMatches::new();
+    utils::get_matches_from_cli(&mut matches);
+    
     match matches.subcommand() {
         ("make", Some(sub_com)) => {
             let index_file_name = sub_com.value_of("index").unwrap_or("index.caibx");
             let store_folder_name = sub_com.value_of("store").unwrap_or("default.castr");
             let input_file_name = sub_com.value_of("file").unwrap();
 
+            // TODO: Should have been Chunker instead of ChunkerConfig, separate out configuration
             let mut chunkerConfig = chunker::ChunkerConfig {
                 index: Box::new(index::LocalIndexFile::new(index_file_name)),
                 store: Box::new(store::LocalStore::new(store_folder_name, chunker::CHUNK_SIZE_MIN_DEFAULT, chunker::CHUNK_SIZE_MAX_DEFAULT, chunker::CHUNK_SIZE_AVG_DEFAULT)),
@@ -131,7 +87,7 @@ fn main() {
                         }
                     }
             } else {
-                info!("Ignoring seed, both seed and index or required");
+                info!("Ignoring seed and continuing, both seed and index are required");
                 assembler::AssemblerConfig {
                     seed: None,
                     seed_index: None,
@@ -141,6 +97,32 @@ fn main() {
                 }
             };
             a.assemble();
+        },
+        ("list-chunks", Some(sub_com)) => {
+            let index_file = sub_com.value_of("index");
+            let input_file = sub_com.value_of("file");
+            if let Some(index_file_name) = index_file {
+                let mut index_holder = index::LocalIndexFile::open(index_file_name);
+                index_holder.read();
+                println!("\nTotal number of chunks {}\n", index_holder.getChunkData().len());
+                println!("chunk_id/start/size(bytes):\n");
+                index_holder.getChunkData().iter().for_each(|chunk| {
+                    println!("{:70} {:20} {:20}", utils::bytes_to_hex(chunk.id.to_vec()), chunk.start, chunk.size);
+                });
+                println!("Done!");
+            } else if let Some(input_file_name) = input_file {
+                let mut chunkerConfig = chunker::ChunkerConfig {
+                    index: Box::new(index::InMemoryIndex::new("")),
+                    store: Box::new(store::DummyStore::new(chunker::CHUNK_SIZE_MIN_DEFAULT, chunker::CHUNK_SIZE_MAX_DEFAULT, chunker::CHUNK_SIZE_AVG_DEFAULT)),
+                    source: Box::new(io::LocalSourceFile::new(String::from(input_file_name))),
+                    min_size: chunker::CHUNK_SIZE_MIN_DEFAULT,
+                    max_size: chunker::CHUNK_SIZE_MAX_DEFAULT,
+                    avg_size: chunker::CHUNK_SIZE_AVG_DEFAULT
+                };
+                chunkerConfig.chunk();
+            } else {
+                panic!("invalid options");
+            }
         },
         _ => {
             panic!("Arg not supported/provided");

@@ -67,6 +67,39 @@ pub trait Store {
     fn read_item(&mut self, id: Vec<u8>) -> Vec<u8>;
 }
 
+// DummyStore
+pub struct DummyStore {
+    pub stats: StoreStats
+}
+
+impl DummyStore {
+    pub fn new(min:u64, max: u64, avg: u64) -> DummyStore {
+        DummyStore{
+            stats: StoreStats::new(min, max, avg)
+        }
+    }
+}
+
+impl Store for DummyStore {
+    fn create(&self, _path: &str) -> PathBuf {
+        PathBuf::new()
+    }
+    fn write_item(&mut self, bytes: Vec<u8>) -> [u8;32] {
+        // TODO: This may not be needed, have to refactor to trait accordingly
+        let mut hasher = Sha512Trunc256::new();
+        hasher.input(&bytes);
+        // let hash_value = hasher.result_str();
+        // self.stats.add_item(bytes.len() as u64);
+        // println!("{:70} {:20}", hash_value, bytes.len());
+        let mut hash_bytes: [u8;32] = [0;32];
+        hasher.result(&mut hash_bytes);
+        hash_bytes
+    }
+    fn read_item(&mut self, id: Vec<u8>) -> Vec<u8> {
+        Vec::new()
+    }
+}
+
 // LocalStore 
 pub struct LocalStore {
     pub path: String,
